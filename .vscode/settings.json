@@ -1,0 +1,20 @@
+{
+  "C_Cpp.intelliSenseEngine": "default",
+  "idf.espIdfPath": "/home/vinzenz/workspace/esp/v5.3.2/esp-idf",
+  "idf.pythonInstallPath": "/home/vinzenz/anaconda3/bin/python",
+  "idf.openOcdConfigs": [
+    "board/esp32c3-builtin.cfg"
+  ],
+  "idf.port": "/dev/ttyACM0",
+  "idf.toolsPath": "/home/vinzenz/.espressif",
+  "idf.customExtraVars": {
+    "IDF_TARGET": "esp32c3"
+  },
+  "idf.flashType": "UART",
+  "idf.monitorPort": "/dev/ttyACM0",
+  "files.associations": {
+    "sdkconfig.h": "c",
+    "cstdlib": "c",
+    "esp-bsp.h": "c"
+  }
+}
