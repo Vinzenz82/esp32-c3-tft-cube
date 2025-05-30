@@ -15,6 +15,13 @@
   "files.associations": {
     "sdkconfig.h": "c",
     "cstdlib": "c",
-    "esp-bsp.h": "c"
+    "esp-bsp.h": "c",
+    "cstdint": "c",
+    "gpio.h": "c",
+    "soc_caps.h": "c",
+    "freertos.h": "c",
+    "esp_mac.h": "c",
+    "esp_timer.h": "c",
+    "esp_now.h": "c"
   }
 }
