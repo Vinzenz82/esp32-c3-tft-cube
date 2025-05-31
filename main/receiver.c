@@ -21,7 +21,7 @@
 // --- CALIBRATION CONSTANTS (PLEASE ADJUST!) ---
 // This is the expected RSSI value at a distance of 1 meter.
 // Measure this in your environment! Typical values range between -40 and -60 dBm.
-#define RSSI_AT_1_METER -75.0
+#define RSSI_AT_1_METER (-51.0)
 
 // Path Loss Exponent (n).
 // Describes how quickly the signal decreases with distance.
@@ -29,7 +29,7 @@
 // - Indoor (line of sight): 1.6 - 1.8
 // - Indoor (with obstacles): 2.0 - 4.0 (can vary significantly!)
 // Start with ~2.5 or 3.0 and adjust as needed.
-#define PATH_LOSS_EXPONENT 2.5
+#define PATH_LOSS_EXPONENT (1.64f)
 // ---------------------------------------------------
 
 static const char *TAG = "receiver";

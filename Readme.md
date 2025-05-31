@@ -2,6 +2,8 @@
 
 A wireless distance measurement system using ESP32-C3 microcontrollers with TFT displays like the [Spotpear MiniTV](https://spotpear.com/shop/ESP32-C3-desktop-trinket-Mini-TV-Portable-Pendant-LVGL-1.44inch-LCD-ST7735.html). The system consists of a sender and receiver pair that communicate using ESP-NOW protocol to measure and display the distance between them.
 
+![Transmitter](doc/transmitter.gif) ![Receiver](doc/receiver.gif)
+
 ## Features
 
 - Wireless distance measurement using RSSI (Received Signal Strength Indicator)

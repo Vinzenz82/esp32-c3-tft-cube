@@ -145,7 +145,7 @@ void lv_screen_timer_label(lv_timer_t* timer)
                     int16_t rssi = RECEIVER_getRSSI();
 
                     char distance_str[32];
-                    snprintf(distance_str, sizeof(distance_str), "< %um (%d)", distance, rssi);
+                    snprintf(distance_str, sizeof(distance_str), "< %um (RSSI: %d)", distance, rssi);
                     lv_label_set_text(user, distance_str);
                 }
                 else {
