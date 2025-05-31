@@ -8,7 +8,7 @@
 
 #include "gpio.h"
 
-#define BLINK_GPIO CONFIG_BLINK_GPIO
+#define BLINK_GPIO 11
 #define GPIO_BUTTON_1 8
 #define GPIO_BUTTON_2 10
 
