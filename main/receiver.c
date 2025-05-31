@@ -9,7 +9,7 @@
 #include "sdkconfig.h"
 #include "esp_now.h"
 #include "esp_wifi.h"
-#include "esp_mac.h" // Für ESP_MAC_ADDR_LEN
+#include "esp_mac.h" // For ESP_MAC_ADDR_LEN
 #include "esp_timer.h" 
 
 #include "bsp/esp-bsp.h"
@@ -18,34 +18,35 @@
 #include "receiver.h"
 #include "common.h" 
 
-// --- KALIBRIERUNGSKONSTANTEN (BITTE ANPASSEN!) ---
-// Dies ist der erwartete RSSI-Wert bei einem Abstand von 1 Meter.
-// Messen Sie dies in Ihrer Umgebung! Typische Werte liegen zwischen -40 und -60 dBm.
+// --- CALIBRATION CONSTANTS (PLEASE ADJUST!) ---
+// This is the expected RSSI value at a distance of 1 meter.
+// Measure this in your environment! Typical values range between -40 and -60 dBm.
 #define RSSI_AT_1_METER -75.0
 
-// Pfadverlustexponent (Path Loss Exponent - n).
-// Beschreibt, wie schnell das Signal mit der Entfernung abnimmt.
-// - Freier Raum: ~2.0
-// - Innenräume (Sichtlinie): 1.6 - 1.8
-// - Innenräume (mit Hindernissen): 2.0 - 4.0 (kann stark variieren!)
-// Beginnen Sie mit ~2.5 oder 3.0 und passen Sie an.
+// Path Loss Exponent (n).
+// Describes how quickly the signal decreases with distance.
+// - Free space: ~2.0
+// - Indoor (line of sight): 1.6 - 1.8
+// - Indoor (with obstacles): 2.0 - 4.0 (can vary significantly!)
+// Start with ~2.5 or 3.0 and adjust as needed.
 #define PATH_LOSS_EXPONENT 2.5
 // ---------------------------------------------------
 
 static const char *TAG = "receiver";
-static int16_t s_arc_value = 100;
+static uint16_t s_arc_value = 100;
+static int16_t s_rssi_value = 0;
 
 // forward declarations
 static esp_err_t RECEIVER_espnow_init(void);
 static void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len);
 
-// Funktion zur Schätzung der Entfernung basierend auf RSSI
-// Verwendet das vereinfachte Log-Distanz-Pfadverlustmodell: RSSI = A - 10*n*log10(d)
-// wobei A = RSSI_AT_1_METER, n = PATH_LOSS_EXPONENT, d = Distanz
-// Umgestellt nach d: d = 10^((A - RSSI) / (10 * n))
-static float estimate_distance(int rssi) {
-    // Vermeide Division durch Null oder Logarithmus von Nicht-Positiven Zahlen (theoretisch)
-    if (PATH_LOSS_EXPONENT == 0) return -1.0; // Ungültiger Exponent
+// Function to estimate distance based on RSSI
+// Uses the simplified log-distance path loss model: RSSI = A - 10*n*log10(d)
+// where A = RSSI_AT_1_METER, n = PATH_LOSS_EXPONENT, d = distance
+// Rearranged for d: d = 10^((A - RSSI) / (10 * n))
+static float estimate_distance(int16_t rssi) {
+    // Avoid division by zero or logarithm of non-positive numbers (theoretical)
+    if (PATH_LOSS_EXPONENT == 0) return -1.0; // Invalid exponent
 
     float exponent = (RSSI_AT_1_METER - (float)rssi) / (10.0f * PATH_LOSS_EXPONENT);
     return powf(10.0f, exponent);
@@ -58,7 +59,7 @@ void RECEIVER_init(void) {
     }
 }
 
-// ESP-NOW Initialisierung
+// ESP-NOW initialization
 static esp_err_t RECEIVER_espnow_init(void) {
     // Initialize ESP-NOW
     ESP_ERROR_CHECK(esp_now_init());
@@ -77,7 +78,8 @@ static void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *
     }
 
     uint8_t *mac_addr = recv_info->src_addr;
-    int rssi = recv_info->rx_ctrl->rssi; // RSSI aus den RX Control Infos holen
+    int16_t rssi = recv_info->rx_ctrl->rssi; // Get RSSI from RX control info
+    s_rssi_value = rssi;
 
     if (mac_addr == NULL) {
          ESP_LOGE(TAG, "Receive CB mac_addr is NULL");
@@ -87,22 +89,27 @@ static void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *
     GPIO_toggle_led();
     COMMON_callback_called();
 
-    // Daten empfangen und loggen
+    // Receive and log data
     char received_data[len + 1];
     memcpy(received_data, data, len);
-    received_data[len] = '\0'; // Null-Terminierung für String-Ausgabe
+    received_data[len] = '\0'; // Null termination for string output
     ESP_LOGI(TAG, "Received data from " MACSTR ": %s (RSSI: %d)", MAC2STR(mac_addr), received_data, rssi);
 
-    // Distanz schätzen und ausgeben
+    // Estimate and output distance
     float distance = estimate_distance(rssi);
     if (distance >= 0) {
         ESP_LOGI(TAG, "Estimated distance: %.2f meters", distance);
         s_arc_value = (uint16_t)distance;
     } else {
         ESP_LOGW(TAG, "Could not estimate distance (invalid parameters or calculation). RSSI was %d", rssi);
+        s_arc_value = 0;
     }
 }
 
-int16_t RECEIVER_getDistance(void) {
+uint16_t RECEIVER_getDistance(void) {
     return s_arc_value;
+}
+
+int16_t RECEIVER_getRSSI(void) {
+    return s_rssi_value;
 }

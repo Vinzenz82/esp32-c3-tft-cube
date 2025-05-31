@@ -9,20 +9,19 @@
 #include "sdkconfig.h"
 #include "esp_now.h"
 #include "esp_wifi.h"
-#include "esp_mac.h" // Für ESP_MAC_ADDR_LEN
+#include "esp_mac.h" // For ESP_MAC_ADDR_LEN
 #include "esp_timer.h" 
 
 #include "gpio.h"
 #include "sender.h"
 #include "common.h" 
 
-#define ESPNOW_SEND_DELAY_MS 1000 // Sende alle 1000ms
+#define ESPNOW_SEND_DELAY_MS 1000 // Send every 1000ms
 
-// !!! WICHTIG: Ersetzen Sie dies mit der MAC-Adresse des EMPFÄNGER-ESP32 !!!
-// static uint8_t s_peer_mac[ESP_NOW_ETH_ALEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; // Beispiel: Broadcast, ersetzen!
-// Beispiel für eine spezifische MAC:
-static uint8_t s_peer_mac[ESP_NOW_ETH_ALEN] = {0xE4, 0xB0, 0x63, 0x15, 0xF6, 0x24};
-// static uint8_t s_peer_mac[ESP_NOW_ETH_ALEN] = {0xE4, 0xB0, 0x63, 0x15, 0xF7, 0xB0};
+// !!! IMPORTANT: Replace this with the MAC address of the RECEIVER-ESP32 !!!
+static uint8_t s_peer_mac[ESP_NOW_ETH_ALEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; // Example: Broadcast, replace!
+// Example for a specific MAC:
+// static uint8_t s_peer_mac[ESP_NOW_ETH_ALEN] = {0xE4, 0xB0, 0x63, 0x15, 0xF6, 0x24};
 
 static const char *TAG = "sender";
 
@@ -32,11 +31,11 @@ static void SENDER_sender_task(void *pvParameter);
 
 void SENDER_init(void) {
     // Start Sender Task
-    xTaskCreate(SENDER_sender_task, "sender_task", 4096, NULL, 5, NULL);
+    xTaskCreate(SENDER_sender_task, "sender_task", 2048, NULL, 5, NULL);
 }
 
-// ESP-NOW Initialisierung
-static esp_err_t RECEIVER_espnow_init(void) {
+// ESP-NOW Initialization
+static esp_err_t sender_espnow_init(void) {
     // Initialize ESP-NOW
     ESP_ERROR_CHECK(esp_now_init());
 
@@ -51,9 +50,9 @@ static esp_err_t RECEIVER_espnow_init(void) {
         return ESP_FAIL;
     }
     memset(peer, 0, sizeof(esp_now_peer_info_t));
-    peer->channel = 0; // 0 bedeutet aktueller Kanal
+    peer->channel = 0; // 0 means current channel
     peer->ifidx = ESP_IF_WIFI_STA;
-    peer->encrypt = false; // Keine Verschlüsselung für dieses Beispiel
+    peer->encrypt = false; // No encryption for this example
     memcpy(peer->peer_addr, s_peer_mac, ESP_NOW_ETH_ALEN);
     ESP_ERROR_CHECK(esp_now_add_peer(peer));
     free(peer);
@@ -78,12 +77,12 @@ static void espnow_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status
     }
 }
 
-// Haupt-Task des Senders
+// Main Sender Task
 static void SENDER_sender_task(void *pvParameter) {
     uint32_t counter = 0;
     char send_data[32];
 
-    if (RECEIVER_espnow_init() != ESP_OK) {
+    if (sender_espnow_init() != ESP_OK) {
         ESP_LOGE(TAG, "ESP-NOW initialization failed");
         vTaskDelete(NULL);
     }
@@ -95,7 +94,7 @@ static void SENDER_sender_task(void *pvParameter) {
         esp_err_t result = esp_now_send(s_peer_mac, (uint8_t *)send_data, strlen(send_data));
 
         if (result == ESP_OK) {
-            // ESP_LOGI(TAG, "Sent data: %s", send_data); // Loggen ggf. Send Callback überlassen
+            // ESP_LOGI(TAG, "Sent data: %s", send_data); // Logging can be handled by Send Callback
         } else {
             ESP_LOGE(TAG, "Error sending data: %s", esp_err_to_name(result));
         }

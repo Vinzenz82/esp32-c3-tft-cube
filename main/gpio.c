@@ -13,6 +13,8 @@
 #define GPIO_BUTTON_2 10
 
 static const char *TAG = "gpio";
+static bool s_button_state[2] = {false}; 
+static gpio_callback_t s_callback[2] = {NULL};
 
 void GPIO_configure_io(void)
 {
@@ -62,18 +64,64 @@ void GPIO_button_monitoring_task(void *pvParameter) {
             if ((xTaskGetTickCount() - last_press_time[0]) > debounce_delay) {
                 last_press_time[0] = xTaskGetTickCount();
                 ESP_LOGI(TAG, "Button an GPIO %d gedrückt!", GPIO_BUTTON_1);
+                s_button_state[0] = true;
+                if(s_callback[0] != NULL) {
+                    s_callback[0]();
+                }
             }
         }
+        // Prüfen auf steigende Flanke (Button losgelassen)
+        else if (last_button_state[0] == false && current_button_state[0] == true) {
+            if ((xTaskGetTickCount() - last_press_time[0]) > debounce_delay) {
+                last_press_time[0] = xTaskGetTickCount();
+                ESP_LOGI(TAG, "Button an GPIO %d losgelassen!", GPIO_BUTTON_1);
+                s_button_state[0] = false;
+            }
+        }
+
         // Prüfen auf fallende Flanke (Button gedrückt)
         if (last_button_state[1] == true && current_button_state[1] == false) {
             // Entprellen
             if ((xTaskGetTickCount() - last_press_time[1]) > debounce_delay) {
                 last_press_time[1] = xTaskGetTickCount();
                 ESP_LOGI(TAG, "Button an GPIO %d gedrückt!", GPIO_BUTTON_2);
+                s_button_state[1] = true;
+                if(s_callback[1] != NULL) {
+                    s_callback[1]();
+                }
             }
         }
+        // Prüfen auf steigende Flanke (Button losgelassen)
+        else if (last_button_state[1] == false && current_button_state[1] == true) {
+            if ((xTaskGetTickCount() - last_press_time[1]) > debounce_delay) {
+                last_press_time[1] = xTaskGetTickCount();
+                ESP_LOGI(TAG, "Button an GPIO %d losgelassen!", GPIO_BUTTON_2);
+                s_button_state[1] = false;
+            }
+        }
+
         last_button_state[0] = current_button_state[0];
         last_button_state[1] = current_button_state[1];
         vTaskDelay(pdMS_TO_TICKS(20)); // Alle 20ms prüfen
     }
+}
+
+bool GPIO_get_button_set(void)
+{
+    return s_button_state[1];
+}
+
+bool GPIO_get_button_enter(void)
+{
+    return s_button_state[0];
+}
+
+void GPIO_register_callback_button_set(gpio_callback_t callback)
+{
+    s_callback[1] = callback;
+}
+
+void GPIO_register_callback_button_enter(gpio_callback_t callback)
+{
+    s_callback[0] = callback;
 }
