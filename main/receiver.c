@@ -21,7 +21,7 @@
 // --- CALIBRATION CONSTANTS (PLEASE ADJUST!) ---
 // This is the expected RSSI value at a distance of 1 meter.
 // Measure this in your environment! Typical values range between -40 and -60 dBm.
-#define RSSI_AT_1_METER (-51.0)
+static float s_rssi_at_1_meter = -51.0f;
 
 // Path Loss Exponent (n).
 // Describes how quickly the signal decreases with distance.
@@ -33,7 +33,7 @@
 // ---------------------------------------------------
 
 static const char *TAG = "receiver";
-static uint16_t s_arc_value = 100;
+static float s_arc_value = 100.0f;
 static int16_t s_rssi_value = 0;
 
 // forward declarations
@@ -48,8 +48,16 @@ static float estimate_distance(int16_t rssi) {
     // Avoid division by zero or logarithm of non-positive numbers (theoretical)
     if (PATH_LOSS_EXPONENT == 0) return -1.0; // Invalid exponent
 
-    float exponent = (RSSI_AT_1_METER - (float)rssi) / (10.0f * PATH_LOSS_EXPONENT);
+    float exponent = (s_rssi_at_1_meter - (float)rssi) / (10.0f * PATH_LOSS_EXPONENT);
     return powf(10.0f, exponent);
+}
+
+float RECEIVER_getRssiAt1Meter(void) {
+    return s_rssi_at_1_meter;
+}
+
+void RECEIVER_setRssiAt1Meter(void) {
+    s_rssi_at_1_meter = s_rssi_value;
 }
 
 void RECEIVER_init(void) {
@@ -99,14 +107,14 @@ static void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *
     float distance = estimate_distance(rssi);
     if (distance >= 0) {
         ESP_LOGI(TAG, "Estimated distance: %.2f meters", distance);
-        s_arc_value = (uint16_t)distance;
+        s_arc_value = distance;
     } else {
         ESP_LOGW(TAG, "Could not estimate distance (invalid parameters or calculation). RSSI was %d", rssi);
-        s_arc_value = 0;
+        s_arc_value = 0.0f;
     }
 }
 
-uint16_t RECEIVER_getDistance(void) {
+float RECEIVER_getDistance(void) {
     return s_arc_value;
 }
 

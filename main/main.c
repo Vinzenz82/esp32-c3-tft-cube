@@ -40,7 +40,7 @@ typedef struct {
     lv_obj_t *label_enter;
     
     /* Screen 1 objects */
-    lv_obj_t *label_mac;
+    lv_obj_t *label_value;
     lv_obj_t *arc;
     lv_obj_t *led;
 } lvgl_objects_t;
@@ -53,6 +53,7 @@ typedef struct {
     lv_timer_t *screen_1_label;
     lv_timer_t *screen_1_led;
     lv_timer_t *screen_1_arc;
+    lv_timer_t *screen_1_calib;
 } lvgl_timers_t;
 
 static lvgl_objects_t g_lvgl_objects = {0};
@@ -63,19 +64,34 @@ static SemaphoreHandle_t g_lvgl_mutex = NULL;
 
 static bool s_globSelectionDone = false;
 static bool s_globIsReceiver = true;
+static uint8_t s_globCalibStep = 0u;
 
-void toggle_is_receiver(void) {
+void button_pressed_set(void) {
     if (xSemaphoreTake(g_lvgl_mutex, portMAX_DELAY) == pdTRUE) {
         if( s_globSelectionDone == false ) {
             s_globIsReceiver = !s_globIsReceiver;
+        }
+        else {
+            if( s_globCalibStep == 0 ) {
+                if(lv_timer_get_paused(g_lvgl_timers.screen_1_calib)) {
+                    lv_timer_resume(g_lvgl_timers.screen_1_calib);
+                }
+            }
+            s_globCalibStep ^= 1;
         }
         xSemaphoreGive(g_lvgl_mutex);
     }
 }
 
-void set_selection_done(void) {
+void button_pressed_enter(void) {
     if (xSemaphoreTake(g_lvgl_mutex, portMAX_DELAY) == pdTRUE) {
         s_globSelectionDone = true;
+
+        if( s_globCalibStep == 1 ) {
+            RECEIVER_setRssiAt1Meter();
+            s_globCalibStep = 0;
+        }
+
         xSemaphoreGive(g_lvgl_mutex);
     }
 }
@@ -91,7 +107,13 @@ void lv_screen_timer_arc(lv_timer_t* timer)
 
     if (xSemaphoreTake(g_lvgl_mutex, portMAX_DELAY) == pdTRUE) {
         if( s_globIsReceiver ) {
-            lv_arc_set_value(user, RECEIVER_getDistance());
+            if( s_globCalibStep == 0 ) {
+                lv_obj_remove_flag(user, LV_OBJ_FLAG_HIDDEN);
+                lv_arc_set_value(user, (int32_t)RECEIVER_getDistance());
+            }
+            else {
+                lv_obj_add_flag(user, LV_OBJ_FLAG_HIDDEN);
+            }
         }
         else {
             int32_t value = 50.0 * cos((2.0*3.184*xTaskGetTickCount())/400.0);
@@ -111,18 +133,25 @@ void lv_screen_timer_led(lv_timer_t* timer)
         return;
     }
 
-    lv_led_toggle(user);
+    if( s_globCalibStep == 0 ) {
+        lv_obj_remove_flag(user, LV_OBJ_FLAG_HIDDEN);
 
-    int64_t time_ms = (esp_timer_get_time() - COMMON_get_time_of_last_callback()) / 1000;
+        lv_led_toggle(user);
 
-    if( time_ms < 2000 ) {
-        lv_led_set_color(user, lv_palette_main(LV_PALETTE_GREEN));
-    } else if ( time_ms < 4000 ) {
-        lv_led_set_color(user, lv_palette_main(LV_PALETTE_YELLOW));
-    } else if ( time_ms < 8000 ) {
-        lv_led_set_color(user, lv_palette_main(LV_PALETTE_ORANGE));
-    } else {
-        lv_led_set_color(user, lv_palette_main(LV_PALETTE_RED));
+        int64_t time_ms = (esp_timer_get_time() - COMMON_get_time_of_last_callback()) / 1000;
+
+        if( time_ms < 2000 ) {
+            lv_led_set_color(user, lv_color_hex(0x0000FF));
+        } else if ( time_ms < 4000 ) {
+            lv_led_set_color(user, lv_palette_main(LV_PALETTE_YELLOW));
+        } else if ( time_ms < 8000 ) {
+            lv_led_set_color(user, lv_palette_main(LV_PALETTE_ORANGE));
+        } else {
+            lv_led_set_color(user, lv_palette_main(LV_PALETTE_RED));
+        }
+    }
+    else {
+        lv_obj_add_flag(user, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
@@ -141,12 +170,23 @@ void lv_screen_timer_label(lv_timer_t* timer)
         if( COMMON_get_time_of_last_callback() > 0 ) {
             if( time_ms < 2000 ) {
                 if( s_globIsReceiver ) {
-                    uint16_t distance = RECEIVER_getDistance();
-                    int16_t rssi = RECEIVER_getRSSI();
+                    const float distance = RECEIVER_getDistance();
+                    const int16_t rssi = RECEIVER_getRSSI();
 
-                    char distance_str[32];
-                    snprintf(distance_str, sizeof(distance_str), "< %um (RSSI: %d)", distance, rssi);
-                    lv_label_set_text(user, distance_str);
+                    if( s_globCalibStep == 0 ) {
+                        char distance_str[32];
+                        snprintf(distance_str, sizeof(distance_str), "< %.0fm (RSSI: %d)", ceilf(distance), rssi);
+                        lv_obj_set_style_text_font(user, &lv_font_montserrat_12, 0);
+                        lv_obj_align(user, LV_ALIGN_BOTTOM_MID, 0, 0);
+                        lv_label_set_text(user, distance_str);
+                    }
+                    else {
+                        char distance_str[64];
+                        snprintf(distance_str, sizeof(distance_str), "Press Apply at exactly 1m. (RSSI: %d)", rssi);
+                        lv_obj_set_style_text_font(user, &lv_font_montserrat_14, 0);
+                        lv_obj_align(user, LV_ALIGN_CENTER, 0, 0);
+                        lv_label_set_text(user, distance_str);
+                    }
                 }
                 else {
                     lv_label_set_text(user, "Broadcasting...");
@@ -158,6 +198,42 @@ void lv_screen_timer_label(lv_timer_t* timer)
             }
         }
         xSemaphoreGive(g_lvgl_mutex);
+    }
+}
+
+void lv_screen_timer_calib(lv_timer_t* timer)
+{
+        /*Use the user_data*/
+    lvgl_objects_t* user = lv_timer_get_user_data(timer);
+    
+    if (user == NULL) {
+        return;
+    }
+
+    if(s_globCalibStep == 0) {
+        lv_timer_pause(g_lvgl_timers.screen_1_calib);
+
+        if (user->btn_set != NULL) {
+            lv_obj_set_size(user->btn_set, 5, 20);
+        }
+        if (user->label_set != NULL) {
+            lv_label_set_text(user->label_set, "");
+        }
+        if (user->label_enter != NULL) {
+            lv_obj_add_flag(user->btn_enter, LV_OBJ_FLAG_HIDDEN);
+        }
+
+    }
+    else {
+        if (user->btn_set != NULL) {
+            lv_obj_set_size(user->btn_set, 45, 20);
+        }
+        if (user->label_set != NULL) {
+            lv_label_set_text(user->label_set, "Abort");
+        }
+        if (user->label_enter != NULL) {
+            lv_obj_remove_flag(user->btn_enter, LV_OBJ_FLAG_HIDDEN);
+        }
     }
 }
 
@@ -221,8 +297,8 @@ void lv_screen_0(void)
 
 void lv_screen_1(void)
 {
-    /*Change the active screen's background color*/
-    lv_obj_set_style_bg_color(lv_screen_active(), lv_color_hex(0x000000), LV_PART_MAIN);
+    /*Change the active screen's background color to white*/
+    lv_obj_set_style_bg_color(lv_screen_active(), lv_color_hex(0xFFFFFF), LV_PART_MAIN);
 
     /*Create a white label, set its text and align it to the center*/
     uint8_t mac[8] = {0};
@@ -231,11 +307,14 @@ void lv_screen_1(void)
     esp_read_mac(&mac[0], ESP_IF_WIFI_STA);
     snprintf(&mac_string[0], 31, "%02X %02X %02X %02X %02X %02X ", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
-    g_lvgl_objects.label_mac = lv_label_create(lv_screen_active());
-    lv_label_set_text(g_lvgl_objects.label_mac, (const char *)&mac_string);
-    lv_obj_set_style_text_color(lv_screen_active(), lv_color_hex(0xffffff), LV_PART_MAIN);
-    lv_obj_set_style_text_font(g_lvgl_objects.label_mac, &lv_font_montserrat_12, 0);
-    lv_obj_align(g_lvgl_objects.label_mac, LV_ALIGN_BOTTOM_MID, 0, 0);
+    g_lvgl_objects.label_value = lv_label_create(lv_screen_active());
+    lv_label_set_text(g_lvgl_objects.label_value, (const char *)&mac_string);
+    lv_obj_set_style_text_color(g_lvgl_objects.label_value, lv_color_hex(0x000000), LV_PART_MAIN);  /* Black text for contrast */
+    lv_obj_set_style_text_font(g_lvgl_objects.label_value, &lv_font_montserrat_12, 0);
+    lv_obj_align(g_lvgl_objects.label_value, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_label_set_long_mode(g_lvgl_objects.label_value, LV_LABEL_LONG_WRAP);     /*Break the long lines*/
+    lv_obj_set_style_text_align(g_lvgl_objects.label_value, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_width(g_lvgl_objects.label_value, 120);  /*Set smaller width to make the lines wrap*/
 
     /*Create an Arc*/
     g_lvgl_objects.arc = lv_arc_create(lv_screen_active());
@@ -251,20 +330,47 @@ void lv_screen_1(void)
     lv_obj_set_size(g_lvgl_objects.arc, 110, 110);
     lv_arc_set_rotation(g_lvgl_objects.arc, 135);
     lv_arc_set_bg_angles(g_lvgl_objects.arc, 0, 270);
-    lv_obj_set_style_arc_color(g_lvgl_objects.arc,lv_palette_main(LV_PALETTE_INDIGO), LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(g_lvgl_objects.arc, lv_color_hex(0xE0E0E0), LV_PART_MAIN);  /* Light gray background */
+    lv_obj_set_style_arc_color(g_lvgl_objects.arc, lv_color_hex(0x0000FF), LV_PART_INDICATOR);  /* Blue indicator for contrast */
     lv_arc_set_value(g_lvgl_objects.arc, 100);
     lv_obj_center(g_lvgl_objects.arc);
 
     /*Create a LED*/
     g_lvgl_objects.led = lv_led_create(lv_screen_active());
     lv_obj_align(g_lvgl_objects.led, LV_ALIGN_CENTER, 0, 0);
-    lv_led_set_brightness(g_lvgl_objects.led, 150);
-    lv_led_set_color(g_lvgl_objects.led, lv_palette_main(LV_PALETTE_INDIGO));
+    lv_led_set_brightness(g_lvgl_objects.led, 200);  /* Increased brightness */
+    lv_led_set_color(g_lvgl_objects.led, lv_color_hex(0x0000FF));  /* Blue LED for contrast */
     lv_led_on(g_lvgl_objects.led);
 
-    g_lvgl_timers.screen_1_label = lv_timer_create(lv_screen_timer_label, 500, g_lvgl_objects.label_mac);
+    /*Create Set button*/
+    g_lvgl_objects.btn_set = lv_btn_create(lv_screen_active());
+    lv_obj_set_size(g_lvgl_objects.btn_set, 5, 20);
+    lv_obj_align(g_lvgl_objects.btn_set, LV_ALIGN_TOP_LEFT, 2, 10);
+    lv_obj_set_style_bg_color(g_lvgl_objects.btn_set, lv_color_hex(0x0000FF), LV_PART_MAIN);  /* Blue button */
+    g_lvgl_objects.label_set = lv_label_create(g_lvgl_objects.btn_set);
+    lv_obj_set_style_text_font(g_lvgl_objects.label_set, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(g_lvgl_objects.label_set, lv_color_hex(0xFFFFFF), LV_PART_MAIN);  /* White text */
+    lv_label_set_text(g_lvgl_objects.label_set, "");
+    lv_obj_center(g_lvgl_objects.label_set);
+
+    /*Create Enter button*/
+    g_lvgl_objects.btn_enter = lv_btn_create(lv_screen_active());
+    lv_obj_set_size(g_lvgl_objects.btn_enter, 45, 20);
+    lv_obj_align(g_lvgl_objects.btn_enter, LV_ALIGN_BOTTOM_LEFT, 2, -10);
+    lv_obj_set_style_bg_color(g_lvgl_objects.btn_enter, lv_color_hex(0x0000FF), LV_PART_MAIN);  /* Blue button */
+    g_lvgl_objects.label_enter = lv_label_create(g_lvgl_objects.btn_enter);
+    lv_obj_set_style_text_font(g_lvgl_objects.label_enter, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(g_lvgl_objects.label_enter, lv_color_hex(0xFFFFFF), LV_PART_MAIN);  /* White text */
+    lv_label_set_text(g_lvgl_objects.label_enter, "Apply");
+    lv_obj_center(g_lvgl_objects.label_enter);
+    lv_obj_add_flag(g_lvgl_objects.btn_enter, LV_OBJ_FLAG_HIDDEN);
+
+    g_lvgl_timers.screen_1_label = lv_timer_create(lv_screen_timer_label, 500, g_lvgl_objects.label_value);
     g_lvgl_timers.screen_1_led = lv_timer_create(lv_screen_timer_led, 1000, g_lvgl_objects.led);
     g_lvgl_timers.screen_1_arc = lv_timer_create(lv_screen_timer_arc, 100, g_lvgl_objects.arc);
+
+    g_lvgl_timers.screen_1_calib = lv_timer_create(lv_screen_timer_calib, 100, &g_lvgl_objects);
+    lv_timer_pause(g_lvgl_timers.screen_1_calib);
 }
 
 void cleanup_lvgl_resources(void) {
@@ -299,9 +405,9 @@ void cleanup_lvgl_resources(void) {
         lv_obj_delete_async(g_lvgl_objects.btn_enter);
         g_lvgl_objects.btn_enter = NULL;
     }
-    if (g_lvgl_objects.label_mac != NULL) {
-        lv_obj_delete_async(g_lvgl_objects.label_mac);
-        g_lvgl_objects.label_mac = NULL;
+    if (g_lvgl_objects.label_value != NULL) {
+        lv_obj_delete_async(g_lvgl_objects.label_value);
+        g_lvgl_objects.label_value = NULL;
     }
     if (g_lvgl_objects.arc != NULL) {
         lv_obj_delete_async(g_lvgl_objects.arc);
@@ -372,8 +478,8 @@ void app_main(void)
     wifi_init();
 
     // Set button callback
-    GPIO_register_callback_button_set(&toggle_is_receiver);
-    GPIO_register_callback_button_enter(&set_selection_done);
+    GPIO_register_callback_button_set(&button_pressed_set);
+    GPIO_register_callback_button_enter(&button_pressed_enter);
 
     // Start button monitoring task
     xTaskCreate(GPIO_button_monitoring_task, "button_task", 2048, NULL, 10, NULL);
