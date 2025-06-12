@@ -1,4 +1,22 @@
 dependencies:
+  cmd_nvs:
+    dependencies: []
+    source:
+      path: /home/vinzenz/workspace/esp/v5.3.2/esp-idf/examples/system/console/advanced/components/cmd_nvs
+      type: local
+    version: '*'
+  cmd_system:
+    dependencies: []
+    source:
+      path: /home/vinzenz/workspace/esp/v5.3.2/esp-idf/examples/system/console/advanced/components/cmd_system
+      type: local
+    version: '*'
+  cmd_wifi:
+    dependencies: []
+    source:
+      path: /home/vinzenz/workspace/esp/v5.3.2/esp-idf/examples/system/console/advanced/components/cmd_wifi
+      type: local
+    version: '*'
   espressif/cmake_utilities:
     component_hash: 351350613ceafba240b761b4ea991e0f231ac7a9f59a9ee901f751bddc0bb18f
     dependencies:
@@ -95,9 +113,12 @@ dependencies:
       type: service
     version: 9.2.2
 direct_dependencies:
+- cmd_nvs
+- cmd_system
+- cmd_wifi
 - espressif/esp_lvgl_port
 - espressif/led_strip
 - larryli/bsp_generic
-manifest_hash: 00093e39c5fd92ac54e04e5cd21079fdc124144abeddde2fa1f56e1fd03b3563
+manifest_hash: 358221cda2f199d6b1aac9bdbeb880e9387b5e0a380143a035f7b14f5e1317f7
 target: esp32c3
 version: 2.0.0

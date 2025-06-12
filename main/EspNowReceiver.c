@@ -15,8 +15,9 @@
 #include "bsp/esp-bsp.h"
 #include "gpio.h"
 
-#include "receiver.h"
 #include "common.h" 
+
+#include "EspNowReceiver.h"
 
 // --- CALIBRATION CONSTANTS (PLEASE ADJUST!) ---
 // This is the expected RSSI value at a distance of 1 meter.

@@ -1,6 +1,10 @@
-idf_component_register(SRCS "main.c"
-                            "common.c"
-                            "gpio.c"
-                            "sender.c"
-                            "receiver.c"
-                       INCLUDE_DIRS ".")
+idf_component_register(SRCS "FtmClient.c" "main.c"
+                           "gpio.c"
+                           "common.c"
+                           "EspNowSender.c"
+                           "EspNowReceiver.c"
+                           "FtmClient.c"
+                           "FtmResponder.c"
+                           "EspNowCommon.c"
+                           "FtmCommon.c"
+                    INCLUDE_DIRS ".")

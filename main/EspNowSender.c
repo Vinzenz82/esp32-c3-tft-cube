@@ -13,8 +13,9 @@
 #include "esp_timer.h" 
 
 #include "gpio.h"
-#include "sender.h"
+
 #include "common.h" 
+#include "EspNowSender.h"
 
 #define ESPNOW_SEND_DELAY_MS 1000 // Send every 1000ms
 

@@ -25,10 +25,21 @@
 #include "bsp/esp-bsp.h"
 #include "gpio.h"
 #include "common.h"
-#include "sender.h"
-#include "receiver.h"
+#include "EspNowSender.h"
+#include "EspNowReceiver.h"
+#include "FtmResponder.h"
+#include "EspNowCommon.h"
+#include "FtmCommon.h"
+#include "FtmClient.h"
 
 static const char *TAG = "main";
+
+typedef enum {
+    EspNowSender,
+    EspNowReceiver,
+    FtmClient,
+    FtmResponder
+} DeviceMode_t;
 
 /* Global structure to hold all LVGL objects */
 typedef struct {
@@ -63,13 +74,27 @@ static lvgl_timers_t g_lvgl_timers = {0};
 static SemaphoreHandle_t g_lvgl_mutex = NULL;
 
 static bool s_globSelectionDone = false;
-static bool s_globIsReceiver = true;
+static DeviceMode_t s_globDeviceMode = EspNowReceiver;
 static uint8_t s_globCalibStep = 0u;
 
 void button_pressed_set(void) {
     if (xSemaphoreTake(g_lvgl_mutex, portMAX_DELAY) == pdTRUE) {
         if( s_globSelectionDone == false ) {
-            s_globIsReceiver = !s_globIsReceiver;
+            // Cycle through modes
+            switch(s_globDeviceMode) {
+                case EspNowReceiver:
+                    s_globDeviceMode = EspNowSender;
+                    break;
+                case EspNowSender:
+                    s_globDeviceMode = FtmClient;
+                    break;
+                case FtmClient:
+                    s_globDeviceMode = FtmResponder;
+                    break;
+                case FtmResponder:
+                    s_globDeviceMode = EspNowReceiver;
+                    break;
+            }
         }
         else {
             if( s_globCalibStep == 0 ) {
@@ -106,7 +131,7 @@ void lv_screen_timer_arc(lv_timer_t* timer)
     }
 
     if (xSemaphoreTake(g_lvgl_mutex, portMAX_DELAY) == pdTRUE) {
-        if( s_globIsReceiver ) {
+        if( s_globDeviceMode == EspNowReceiver ) {
             if( s_globCalibStep == 0 ) {
                 lv_obj_remove_flag(user, LV_OBJ_FLAG_HIDDEN);
                 lv_arc_set_value(user, (int32_t)RECEIVER_getDistance());
@@ -114,6 +139,10 @@ void lv_screen_timer_arc(lv_timer_t* timer)
             else {
                 lv_obj_add_flag(user, LV_OBJ_FLAG_HIDDEN);
             }
+        }
+        else if( s_globDeviceMode == FtmClient ) {
+            lv_obj_remove_flag(user, LV_OBJ_FLAG_HIDDEN);
+            lv_arc_set_value(user, (int32_t)FTMCOMMON_getDistance());
         }
         else {
             int32_t value = 50.0 * cos((2.0*3.184*xTaskGetTickCount())/400.0);
@@ -169,7 +198,7 @@ void lv_screen_timer_label(lv_timer_t* timer)
     if (xSemaphoreTake(g_lvgl_mutex, portMAX_DELAY) == pdTRUE) {
         if( COMMON_get_time_of_last_callback() > 0 ) {
             if( time_ms < 2000 ) {
-                if( s_globIsReceiver ) {
+                if( s_globDeviceMode == EspNowReceiver ) {
                     const float distance = RECEIVER_getDistance();
                     const int16_t rssi = RECEIVER_getRSSI();
 
@@ -196,6 +225,15 @@ void lv_screen_timer_label(lv_timer_t* timer)
             } else {
                 lv_label_set_text(user, "No connection!");
             }
+        }
+        else if( s_globDeviceMode == FtmClient ) {
+            const float distance = FTMCOMMON_getDistance();
+
+            char distance_str[32];
+            snprintf(distance_str, sizeof(distance_str), "%.0fm", ceilf(distance));
+            lv_obj_set_style_text_font(user, &lv_font_montserrat_12, 0);
+            lv_obj_align(user, LV_ALIGN_BOTTOM_MID, 0, 0);
+            lv_label_set_text(user, distance_str);                    
         }
         xSemaphoreGive(g_lvgl_mutex);
     }
@@ -250,30 +288,48 @@ void lv_screen_timer_label_selection(lv_timer_t* timer)
         return;
     }
     
-    if( s_globIsReceiver ) {
-        lv_label_set_text(user, "Receiver");
+    switch(s_globDeviceMode) {
+        case EspNowReceiver:
+            lv_label_set_text(user, "ESP-NOW Receiver");
+            break;
+        case EspNowSender:
+            lv_label_set_text(user, "ESP-NOW Sender");
+            break;
+        case FtmClient:
+            lv_label_set_text(user, "FTM Client");
+            break;
+        case FtmResponder:
+            lv_label_set_text(user, "FTM Responder");
+            break;
     }
-    else {
-        lv_label_set_text(user, "Sender");
-    }
-
 }
 
 void lv_screen_0(void)
 {
     char label_string[32] = {0};
 
-    if( s_globIsReceiver ) {
-        snprintf(label_string, sizeof(label_string), "Receiver");
-    }
-    else {
-        snprintf(label_string, sizeof(label_string), "Sender");
+    switch(s_globDeviceMode) {
+        case EspNowReceiver:
+            snprintf(label_string, sizeof(label_string), "ESP-NOW Receiver");
+            break;
+        case EspNowSender:
+            snprintf(label_string, sizeof(label_string), "ESP-NOW Sender");
+            break;
+        case FtmClient:
+            snprintf(label_string, sizeof(label_string), "FTM Client");
+            break;
+        case FtmResponder:
+            snprintf(label_string, sizeof(label_string), "FTM Responder");
+            break;
     }
 
     g_lvgl_objects.label_selection = lv_label_create(lv_screen_active());
     lv_label_set_text(g_lvgl_objects.label_selection, (const char *)&label_string);
     lv_obj_set_style_text_font(g_lvgl_objects.label_selection, &lv_font_montserrat_14, 0);
     lv_obj_align(g_lvgl_objects.label_selection, LV_ALIGN_CENTER, 0, 0);
+    lv_label_set_long_mode(g_lvgl_objects.label_selection, LV_LABEL_LONG_WRAP);     /*Break the long lines*/
+    lv_obj_set_style_text_align(g_lvgl_objects.label_selection, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_width(g_lvgl_objects.label_selection, 120);  /*Set smaller width to make the lines wrap*/
 
     /*Create Set and Enter buttons*/
     g_lvgl_objects.btn_set = lv_btn_create(lv_screen_active());
@@ -319,7 +375,8 @@ void lv_screen_1(void)
     /*Create an Arc*/
     g_lvgl_objects.arc = lv_arc_create(lv_screen_active());
 
-    if( s_globIsReceiver ) {
+    if(     ( s_globDeviceMode == EspNowReceiver ) 
+        ||  ( s_globDeviceMode == FtmClient ) ) {
         lv_arc_set_mode(g_lvgl_objects.arc, LV_ARC_MODE_NORMAL);
         lv_arc_set_range(g_lvgl_objects.arc, 0, 50);
     }
@@ -433,25 +490,6 @@ void app_lvgl_display(void)
     bsp_display_unlock();
 }
 
-// WiFi Initialization
-static void wifi_init(void) {
-    ESP_ERROR_CHECK(esp_netif_init()); // Initialize TCP/IP stack (required for Wi-Fi)
-    ESP_ERROR_CHECK(esp_event_loop_create_default()); // Create default event loop
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg)); // Initialize Wi-Fi driver
-    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM)); // Store Wi-Fi config in RAM
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA)); // Station mode is required for ESP-NOW
-    ESP_ERROR_CHECK(esp_wifi_start()); // Start Wi-Fi
-
-    // Optional: Long Range Mode (can help, but also requires receiver support)
-    ESP_ERROR_CHECK(esp_wifi_set_protocol(ESP_IF_WIFI_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N | WIFI_PROTOCOL_LR));
-
-    // Output own MAC address (helpful for the sender)
-    // uint8_t self_mac[ESP_MAC_ADDR_LEN];
-    // esp_wifi_get_mac(ESP_IF_WIFI_STA, self_mac);
-    // ESP_LOGI(TAG, "Receiver MAC Address: " MACSTR, MAC2STR(self_mac));
-}
-
 void app_main(void)
 {
     // Create mutex for thread safety
@@ -474,9 +512,6 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    // Initialize WiFi
-    wifi_init();
-
     // Set button callback
     GPIO_register_callback_button_set(&button_pressed_set);
     GPIO_register_callback_button_enter(&button_pressed_enter);
@@ -497,7 +532,10 @@ void app_main(void)
 
     app_lvgl_display();
 
-    if( s_globIsReceiver ) {
+    if( s_globDeviceMode == EspNowReceiver ) {
+        // Initialize WiFi
+        ESP_ERROR_CHECK(esp_now_wifi_init());
+
         RECEIVER_init();
         
         ESP_LOGI(TAG, "ESP-NOW Receiver Initialized. Waiting for data...");
@@ -507,7 +545,40 @@ void app_main(void)
             vTaskDelay(pdMS_TO_TICKS(5000)); // Prevent app_main from ending
         }
     }
-    else {
+    else if( s_globDeviceMode == EspNowSender ) {
+        // Initialize WiFi
+        ESP_ERROR_CHECK(esp_now_wifi_init());
+
         SENDER_init();
+    }
+    else if( s_globDeviceMode == FtmResponder) {
+        // Initialize WiFi
+        ESP_ERROR_CHECK(ftm_wifi_init());
+
+        FTMRESPONDER_init();
+
+        // Main task can simply wait here or perform other tasks
+        // The actual work happens in the ESP-NOW Receive Callback
+        while(1) {
+            vTaskDelay(pdMS_TO_TICKS(5000)); // Prevent app_main from ending
+        }
+    }
+    else if( s_globDeviceMode == FtmClient) {
+        // Initialize WiFi
+        ESP_ERROR_CHECK(ftm_wifi_init());
+
+        FTMCLIENT_init();
+
+        // Main task can simply wait here or perform other tasks
+        while(1) {
+            vTaskDelay(pdMS_TO_TICKS(3000)); // Prevent app_main from ending
+            FTMCLIENT_measure();
+        }
+    }
+    else {
+        ESP_LOGI(TAG, "Mode not implemented yet");
+        while(1) {
+            vTaskDelay(pdMS_TO_TICKS(5000)); // Prevent app_main from ending
+        }
     }
 }
