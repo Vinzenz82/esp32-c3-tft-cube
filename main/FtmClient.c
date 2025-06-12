@@ -3,7 +3,6 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include "nvs_flash.h"
-#include "cmd_system.h"
 #include "argtable3/argtable3.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
