@@ -6,12 +6,17 @@ A wireless distance measurement system using ESP32-C3 microcontrollers with TFT 
 
 ## Features
 
-- Wireless distance measurement using RSSI (Received Signal Strength Indicator)
+- Wireless distance measurement using multiple protocols:
+  - RSSI (Received Signal Strength Indicator) via ESP-NOW
+  - Fine Timing Measurement (FTM) via WiFi
 - Interactive TFT display interface
 - Real-time distance visualization
-- Configurable sender/receiver mode
+- Configurable operation modes:
+  - ESP-NOW Sender/Receiver
+  - FTM Client/Responder
 - LED status indicators
-- ESP-NOW communication protocol
+- Calibration interface for RSSI measurements
+- ESP-NOW and WiFi FTM communication protocols
 
 ## Hardware Requirements
 
@@ -26,27 +31,48 @@ The main application file that handles:
 - LVGL UI initialization and management
 - Screen transitions and UI elements
 - Button handling and user interaction
-- Mode selection (Sender/Receiver)
+- Mode selection (EspNowSender/EspNowReceiver/FtmClient/FtmResponder)
 - Display updates and animations
+- Calibration interface
 
-### common.c
-Provides common functionality:
-- Timestamp management for callbacks
-- Shared utilities between sender and receiver
+### FtmClient.c
+Implements the FTM client functionality:
+- WiFi FTM initialization and configuration
+- FTM session management
+- Distance measurement using FTM protocol
+- AP scanning and connection
 
-### sender.c
-Implements the sender functionality:
+### FtmResponder.c
+Implements the FTM responder functionality:
+- WiFi FTM responder setup
+- FTM session handling
+- Response to FTM measurement requests
+
+### EspNowSender.c
+Implements the ESP-NOW sender functionality:
 - ESP-NOW initialization and configuration
 - Periodic data broadcasting
 - Send status monitoring
 - LED feedback for successful transmissions
 
-### receiver.c
-Implements the receiver functionality:
+### EspNowReceiver.c
+Implements the ESP-NOW receiver functionality:
 - ESP-NOW initialization and configuration
 - Signal reception and processing
 - Distance calculation using RSSI values
 - Real-time distance updates
+
+### common.c
+Provides common functionality:
+- Timestamp management for callbacks
+- Shared utilities between all modes
+- Calibration data management
+
+### gpio.c
+Handles GPIO operations:
+- Button input processing
+- LED control
+- Hardware interface management
 
 ## Setup Instructions for [ESP32-C3 Mini TV](https://spotpear.com/shop/ESP32-C3-desktop-trinket-Mini-TV-Portable-Pendant-LVGL-1.44inch-LCD-ST7735.html)
 
@@ -65,9 +91,18 @@ idf.py -p COM* flash
 
 ## Distance Measurement
 
-The system uses a log-distance path loss model to estimate distance based on RSSI values. The calculation can be calibrated by adjusting:
+The system supports two methods of distance measurement:
+
+### RSSI-based Measurement (ESP-NOW)
+Uses a log-distance path loss model to estimate distance based on RSSI values. The calculation can be calibrated by adjusting:
 - `RSSI_AT_1_METER`: Expected RSSI value at 1 meter distance
 - `PATH_LOSS_EXPONENT`: Signal attenuation factor (typically 2.0-4.0)
+
+### FTM-based Measurement (WiFi)
+Uses the WiFi Fine Timing Measurement protocol for more accurate distance measurements:
+- Supports burst periods and frame counts configuration
+- Provides time-of-flight measurements
+- Requires FTM-capable WiFi hardware
 
 ## License
 
